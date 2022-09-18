@@ -1,0 +1,10 @@
+[package]
+name = "quadtree"
+version = "0.1.0"
+authors = ["Nikolaj Østergaard <niko.fris@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nalgebra = "0.25.4"
