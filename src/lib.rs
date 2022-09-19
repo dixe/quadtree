@@ -28,7 +28,9 @@ pub struct QuadTree<T> {
     // All nodes in quadTree
     // First node is the root
     // leafs are where count > 0 and then first child is index into element_nodes
-    nodes: Vec::<Node>,
+    // Has to be vec, since otherwise we cannot guarantee that we can get 4 consecutive nodes
+    // Or can we??
+    nodes: FreeList::<Node>,
 
 
     // Actual data inserted into tree
@@ -74,7 +76,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         let leaves = self.find_leaves(&elm);
         for &leaf in &leaves {
 
-            let leaf_node = &mut self.nodes[leaf as usize];
+            let leaf_node = &mut self.nodes[leaf];
 
             for i in 0..leaf_node.count {
 
@@ -120,9 +122,9 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
     pub fn new(rect: Rect) -> Self {
 
-        let mut nodes = Vec::new();
+        let mut nodes = FreeList::new();
 
-        nodes.push(Node {
+        nodes.insert(Node {
             first_child: -1,
             count: 0,
         });
@@ -153,7 +155,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         while let Some(node_data) = to_process.pop_front() {
 
 
-            let node = &self.nodes[node_data.node_id as usize];
+            let node = &self.nodes[node_data.node_id];
 
             // if node is a leaf, push to result
             if node.count != -1 {
@@ -179,7 +181,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-    fn insert_elm(&mut self, element_id: i32,  node_index: usize, element_rect: &Rect, node_rect: &Rect, depth: i32) {
+    fn insert_elm(&mut self, element_id: i32,  node_index: i32, element_rect: &Rect, node_rect: &Rect, depth: i32) {
 
 
         //println!("node_index = {} depth = {} {:?}", node_index, depth, self.nodes[node_index]);
@@ -208,7 +210,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-    fn insert_into_branch(&mut self, element_id: i32, node_index: usize, element_rect: &Rect, node_rect: &Rect, depth: i32) {
+    fn insert_into_branch(&mut self, element_id: i32, node_index: i32, element_rect: &Rect, node_rect: &Rect, depth: i32) {
 
         // We are at a branch
         // check which children it should be se into
@@ -219,7 +221,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             if locations[i] {
                 let new_rect = node_rect.location_quad(i);
 
-                let new_node_index = (self.nodes[node_index].first_child as usize) + i;
+                let new_node_index = (self.nodes[node_index].first_child) + i as i32;
 
                 self.insert_elm(element_id, new_node_index, element_rect, &new_rect, depth + 1);
             }
@@ -228,16 +230,19 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
 
 
-    fn split(&mut self, node_index: usize, node_rect: &Rect) {
+    fn split(&mut self, node_index: i32, node_rect: &Rect) {
         //println!("Making leaf into branch {:?}", node_index);
 
-        self.nodes.push(Node::leaf());
+        let index = self.nodes.insert(Node::leaf());
 
-        let new_first_child = self.nodes.len() - 1;
+        let new_first_child = index;
 
-        self.nodes.push(Node::leaf());
-        self.nodes.push(Node::leaf());
-        self.nodes.push(Node::leaf());
+        let index2 = self.nodes.insert(Node::leaf());
+        let index3 = self.nodes.insert(Node::leaf());
+        let index4 = self.nodes.insert(Node::leaf());
+
+        println!("{:?}", (index, index2, index3, index4));
+        assert!(index == index2 - 1 && index2 == index3 - 1 && index3 == index4 - 1);
 
 
         let mut next_child = self.nodes[node_index].first_child;
@@ -258,7 +263,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
             for i in 0..4 {
                 if locations[i] {
-                    ElmRectNode::insert(reallocated_id, &mut self.nodes[new_first_child + i], &mut self.element_nodes);
+                    ElmRectNode::insert(reallocated_id, &mut self.nodes[new_first_child + i as i32], &mut self.element_nodes);
                 }
             }
 
@@ -277,7 +282,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
 
 
-    fn query_node_box(&self, node_index: usize, node_rect: &Rect, query: &Query, data_vec: &mut std::collections::HashSet::<i32>) {
+    fn query_node_box(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut std::collections::HashSet::<i32>) {
         // leaf, return  all elements
         if self.nodes[node_index].count > -1 {
             let mut child_index = self.nodes[node_index].first_child;
@@ -295,7 +300,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-    fn query_branch(&self, node_index: usize, node_rect: &Rect, query: &Query, data_vec: &mut std::collections::HashSet::<i32>) {
+    fn query_branch(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut std::collections::HashSet::<i32>) {
 
         let locations = match query {
             Query::Point(p) => Rect::point_quad_locations(node_rect, p),
@@ -305,7 +310,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         for i in 0..4 {
             if locations[i] {
                 // point is inside this rect
-                self.query_node_box((self.nodes[node_index].first_child as usize) + i, &node_rect.location_quad(i), query, data_vec);
+                self.query_node_box((self.nodes[node_index].first_child) + i as i32, &node_rect.location_quad(i), query, data_vec);
             }
         }
     }
@@ -316,7 +321,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         self.print_node(0, 0)
     }
 
-    fn print_node(&self, node_index: usize, indent: usize) -> String {
+    fn print_node(&self, node_index: i32, indent: usize) -> String {
 
         if self.nodes[node_index].count >= 0 {
             // leaf
@@ -340,7 +345,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         }
         else {
             // branch
-            let first_index = self.nodes[node_index].first_child as usize;
+            let first_index = self.nodes[node_index].first_child;
 
             let mut res = format!("\n{:indent$}","", indent=indent);
             res += &format!("Branch({})", node_index);
