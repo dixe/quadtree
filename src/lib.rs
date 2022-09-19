@@ -33,23 +33,21 @@ impl ElmRectNode {
             elm_id: id
         });
 
-        println!("Insert = {:?}", (id, elm_node_index, &node));
-
         node.count += 1;
 
         let mut last_node_index = node.first_child;
 
         if last_node_index == -1  {
-            println!("index = -1");
+            //println!("index = -1");
             node.first_child = elm_node_index;
         }
         else {
 
-            while element_nodes[last_node_index].element.next != -1 {
-                last_node_index = element_nodes[last_node_index].element.next;
+            while element_nodes[last_node_index].next != -1 {
+                last_node_index = element_nodes[last_node_index].next;
             }
-            println!("last_index = {}", last_node_index);
-            element_nodes[last_node_index].element.next = elm_node_index;
+            //println!("last_index = {}", last_node_index);
+            element_nodes[last_node_index].next = elm_node_index;
         }
     }
 }
@@ -78,7 +76,7 @@ impl Node {
     pub fn iter_childs<T>(&self, qt: &QuadTree<T>) {
 
         for i in 0..self.count {
-            println!("  ++  Iter: {:?}", (self.first_child + i, &qt.element_nodes[self.first_child + i].element));
+            println!("  ++  Iter: {:?}", (self.first_child + i, &qt.element_nodes[self.first_child + i]));
         }
     }
 }
@@ -99,7 +97,7 @@ impl Query {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Rect {
     pub left: i32,
     pub top: i32,
@@ -230,6 +228,10 @@ impl Rect {
 }
 
 
+struct FindLeaves {
+    node_id: i32,
+    rect: Rect
+}
 
 pub struct QuadTree<T> {
 
@@ -283,7 +285,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
     pub fn get(&'a self, element_id: i32) -> &'a T {
-        let data_id = self.elm_rects[element_id].element.id;
+        let data_id = self.elm_rects[element_id].id;
 
         &self.data[data_id as usize]
     }
@@ -292,17 +294,10 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     pub fn remove(&mut self, element_id: i32) {
 
         let elm = &self.elm_rects[element_id];
-
-        println!("Removing {:?}", element_id);
-
-        let leaves = self.find_leaves(&elm.element);
-
+        let leaves = self.find_leaves(&elm);
         for &leaf in &leaves {
 
-            let leaf_node = &self.nodes[leaf as usize];
-            println!("Processing leaf: {:?}", (leaf, leaf_node));
-
-            leaf_node.iter_childs(self);
+            let leaf_node = &mut self.nodes[leaf as usize];
 
             for i in 0..leaf_node.count {
 
@@ -311,18 +306,22 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
 
                 while cur != -1 {
-                    let e =  &self.element_nodes[cur].element;
-                    println!("lokking at: {:?}",(cur,e));
+                    let e =  &self.element_nodes[cur];
+
                     let next = e.next;
                     let elm_rect_id = e.elm_id;
 
                     if elm_rect_id == element_id {
-                        if prev != -1 {
-                            self.element_nodes[prev].element.next = next;
+                        leaf_node.count -= 1;
+                        if prev != -1 { //  in the middle of element chain
+                            self.element_nodes[prev].next = next;
+                        }
+                        else { // head of element chain, change the leaf node
+                            leaf_node.first_child = self.element_nodes[cur].next;
+                            //self.nodes[leaf_node]
                         }
 
-                        //self.element_nodes.erase(cur);
-                        println!("FOUND ELEMENT TO REMOVE {}", cur);
+                        self.element_nodes.erase(cur);
                     } else {
                         prev = cur;
                     }
@@ -332,8 +331,8 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             }
         }
 
-        // also data?
-        //self.elm_rects.erase(element_id);
+        // also data? but that could be slow???
+        self.elm_rects.erase(element_id);
     }
 
     pub fn query(&self, query: &Query) -> Vec::<&T> {
@@ -384,29 +383,29 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
         let mut to_process = VecDeque::new();
 
-        let elms = self.elm_rects.range();
-
         //0 is root
-        to_process.push_back(0);
+        to_process.push_back(FindLeaves{ node_id:0, rect: self.root_rect});
 
-        while let Some(node_id) = to_process.pop_front() {
 
-            let node = &self.nodes[node_id];
+        while let Some(node_data) = to_process.pop_front() {
+
+
+            let node = &self.nodes[node_data.node_id as usize];
+
+            // if node is a leaf, push to result
             if node.count != -1 {
-                res.push(node_id as i32);
+                res.push(node_data.node_id as i32);
             }
             else {
-                let elm_node = &self.element_nodes[node_id as i32];
-                let rect = &self.elm_rects[elm_node.element.elm_id].element.rect;
-                let locations = Rect::element_quad_locations(&rect, &elm_rect.rect);
-                println!(" LOCS {:?}", locations);
+
+                // is a branch, see which child quads elements fits into
+                let locations = Rect::element_quad_locations(&node_data.rect, &elm_rect.rect);
 
                 for i in 0..4 {
                     if locations[i] {
-                        let id = node.first_child as usize + i;
-                        println!("Pushing :{:?}", id);
-                        to_process.push_back(id);
-                        // push node at this location
+                        // add matching child to process_list and calc the quad
+                        let new_rect = node_data.rect.location_quad(i);
+                        to_process.push_back(FindLeaves {node_id: node.first_child + i as i32, rect: new_rect});
                     }
                 }
             }
@@ -431,7 +430,6 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             }
             // make this into not a leaf, but a branch
             else {
-                //println!("branching");
                 self.split(node_index, node_rect);
 
                 self.nodes[node_index].count = -1;
@@ -486,16 +484,14 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
             //println!("Reallocate element {:?}", self.element_nodes[next_child].element);
             //println!("Original child count {}", self.nodes[node_index].count );
-            let reallocated_id = self.element_nodes[next_child].element.elm_id;
+            let reallocated_id = self.element_nodes[next_child].elm_id;
 
-            let new_next_child = self.element_nodes[next_child].element.next;
+            let new_next_child = self.element_nodes[next_child].next;
 
             self.element_nodes.erase(next_child);
 
-            let child_rect = &self.elm_rects[reallocated_id].element.rect;
+            let child_rect = &self.elm_rects[reallocated_id].rect;
             let locations = Rect::element_quad_locations(node_rect, child_rect);
-
-
 
             for i in 0..4 {
                 if locations[i] {
@@ -524,9 +520,9 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             let mut child_index = self.nodes[node_index].first_child;
 
             while child_index != -1 {
-                data_vec.insert(self.elm_rects[self.element_nodes[child_index].element.elm_id].element.id);
+                data_vec.insert(self.elm_rects[self.element_nodes[child_index].elm_id].id);
 
-                child_index = self.element_nodes[child_index].element.next;
+                child_index = self.element_nodes[child_index].next;
 
             }
         }
@@ -567,7 +563,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
                 let mut res = "".to_string();
                 while child_index != -1 {
-                    let elm_node = &self.element_nodes[child_index].element;
+                    let elm_node = &self.element_nodes[child_index];
                     res += &format!(" element({}): {:?}, node: {:?} | ", elm_node.elm_id, self.data[elm_node.elm_id as usize], child_index);
                     child_index = elm_node.next;
                 }
@@ -768,6 +764,8 @@ mod test {
 
 
         println!("tree:{:?}", qt);
+
+        println!("{:#?}", qt.nodes);
         assert!(false);
 
 
@@ -785,18 +783,22 @@ mod test {
         let id0 = qt.insert(5.0, elm0_rect);
 
         let elm0_rect = Rect::new(7, 7, 1, 1);
-        let id0 = qt.insert(7.0, elm0_rect);
+        let id1 = qt.insert(7.0, elm0_rect);
 
         let elm0_rect = Rect::new(9,9, 1, 1);
-        let id0 = qt.insert(9.0, elm0_rect);
+        let id2 = qt.insert(9.0, elm0_rect);
 
         let elm0_rect = Rect::new(13,13, 1, 1);
-        let id0 = qt.insert(13.0, elm0_rect);
+        let id3 = qt.insert(13.0, elm0_rect);
 
         //println!("{:?}", id0);
         println!("tree:{:?}", qt);
 
-        qt.remove(0);
+        qt.remove(id0);
+
+        println!("tree:{:?}", qt);
+
+        qt.remove(id1);
 
         println!("tree:{:?}", qt);
         assert!(false);

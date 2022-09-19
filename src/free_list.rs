@@ -3,13 +3,13 @@ use std::ops::{Index, IndexMut};
 
 
 #[derive(Debug)]
-pub struct FreeElement<T> {
-    pub element: T,
+pub struct FreeItem<T> {
+    pub item: T,
     next: i32
 }
 
 pub struct FreeList<T> {
-    pub data: Vec::<FreeElement<T>>,
+    pub data: Vec::<FreeItem<T>>,
     pub first_free: i32,
 }
 
@@ -23,17 +23,17 @@ impl<T> FreeList<T> {
         }
     }
 
-    pub fn insert(&mut self, element: T) -> i32 {
+    pub fn insert(&mut self, item: T) -> i32 {
         if self.first_free != -1 {
             let index = self.first_free;
             self.first_free = self.data[self.first_free as usize].next;
-            self.data[index as usize].element = element;
+            self.data[index as usize].item = item;
             self.data[index as usize].next = -1;
             return index;
         }
         else {
-            let fe = FreeElement {
-                element,
+            let fe = FreeItem {
+                item,
                 next: -1
             };
 
@@ -77,17 +77,17 @@ impl<T> FreeList<T> {
 
 
 impl<T> Index<i32> for FreeList<T> {
-    type Output = FreeElement<T>;
+    type Output = T;
 
-    fn index<'a>(&'a self, i: i32) -> &'a FreeElement<T> {
-        &self.data[i as usize]
+    fn index<'a>(&'a self, i: i32) -> &'a T {
+        &self.data[i as usize].item
     }
 }
 
 
 impl<T> IndexMut<i32> for FreeList<T> {
-    fn index_mut<'a>(&'a mut self, i: i32) -> &'a mut FreeElement<T> {
-        &mut self.data[i as usize]
+    fn index_mut<'a>(&'a mut self, i: i32) -> &'a mut T {
+        &mut self.data[i as usize].item
     }
 }
 
@@ -122,16 +122,16 @@ mod test {
         let idx2 = fl.insert(4);
 
         fl.erase(idx1);
-        assert_eq!(fl[idx2].element, 4);
+        assert_eq!(fl[idx2], 4);
 
         let idx3 = fl.insert(2);
         assert_eq!(idx1, idx3); // freeing idx2 is reused as idx3
-        assert_eq!(fl[idx3].element, 2); // new element is retrived
+        assert_eq!(fl[idx3], 2); // new item is retrived
 
         fl.erase(idx2);
         fl.erase(idx3);
 
         let idx = fl.insert(1);
-        assert_eq!(idx, 0); // we have deleted all elements new idx should be 0
+        assert_eq!(idx, 0); // we have deleted all items new idx should be 0
     }
 }
