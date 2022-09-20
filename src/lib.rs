@@ -41,7 +41,7 @@ pub struct QuadTree<T> {
     root_rect: Rect,
 
     max_depth: i32,
-    nodes_per_cell: i32
+    elements_per_node: i32
 
 }
 
@@ -49,6 +49,26 @@ pub struct QuadTree<T> {
 
 // Public interface
 impl<'a, T: std::fmt::Debug> QuadTree<T> {
+
+    pub fn new(rect: Rect) -> Self {
+
+        let mut nodes = FreeList::new();
+
+        nodes.insert(Node {
+            first_child: -1,
+            count: 0,
+        });
+
+        QuadTree {
+            elm_rects: FreeList::new(),
+            element_nodes: FreeList::new(),
+            nodes,
+            data: Vec::new(),
+            root_rect: rect,
+            max_depth: 10,
+            elements_per_node: 2
+        }
+    }
 
     pub fn insert(&mut self, element: T, element_rect: Rect) ->  i32 {
 
@@ -69,7 +89,11 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         element_id
     }
 
+    pub fn set_elements_per_node(&mut self, npc: i32) {
+        self.elements_per_node = i32::max(1, npc);
+    }
 
+    /// Removes an element from the tree. Does not restructure the tree see ['cleanup()']
     pub fn remove(&mut self, element_id: i32) {
 
         let elm = &self.elm_rects[element_id];
@@ -78,11 +102,12 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
             let leaf_node = &mut self.nodes[leaf];
 
+
+            let first_child = leaf_node.first_child;
             for i in 0..leaf_node.count {
 
                 let mut prev = -1;
-                let mut cur = leaf_node.first_child + i;
-
+                let mut cur = first_child + i;;
 
                 while cur != -1 {
                     let e =  &self.element_nodes[cur];
@@ -114,31 +139,69 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         self.elm_rects.erase(element_id);
     }
 
+    /// Clean the tree by making branches with only empty leaf children into leafs
+    /// Only does one level per call.
+    pub fn cleanup(&mut self) {
+
+        let mut to_process = VecDeque::new();
+
+        if self.nodes[0].is_branch() {
+            to_process.push_back(0);
+        }
+
+        let mut to_delete = vec![] ;
+
+        while let Some(node_id) = to_process.pop_front() {
+
+            let branch = &self.nodes[node_id];
+
+            let mut empty_children = 0;
+            for i in 0..4 {
+
+                let child_index = branch.first_child + i;
+                let child = &self.nodes[child_index];
+
+                if child.is_branch() {
+                    to_process.push_back(child_index);
+                }
+                else if child.count == 0 {
+                   empty_children += 1;
+                }
+            }
+
+            if empty_children == 4 {
+                to_delete.push(node_id);
+            }
+
+        }
+
+        for node_id in to_delete {
+            let mut branch = &mut self.nodes[node_id];
+            let first_child = branch.first_child;
+
+            // -1 for no children
+            // count = 0 for leaf
+            branch.first_child = -1;
+            branch.count = 0;
+
+            // Delete order is important. Since last to be deleted
+            // is also first to be reused in free list. Thus delete in this order
+            // ensure that when we split next time, we still get 4 consecutive nodes
+            self.nodes.erase(first_child + 3);
+            self.nodes.erase(first_child + 2);
+            self.nodes.erase(first_child + 1);
+            self.nodes.erase(first_child );
+
+        }
+    }
+
 }
 
 
 // Private functions
 impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
-    pub fn new(rect: Rect) -> Self {
 
-        let mut nodes = FreeList::new();
-
-        nodes.insert(Node {
-            first_child: -1,
-            count: 0,
-        });
-
-        QuadTree {
-            elm_rects: FreeList::new(),
-            element_nodes: FreeList::new(),
-            nodes,
-            data: Vec::new(),
-            root_rect: rect,
-            max_depth: 10,
-            nodes_per_cell: 2
-        }
-    }
 
     fn find_leaves(&self, elm_rect: & ElmRect) -> Vec::<i32> {
         let mut res = vec![];
@@ -189,7 +252,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         // Check if leaf
         if self.nodes[node_index].count > -1 {
             // Check if we can just insert into this node
-            if self.nodes[node_index].count < self.nodes_per_cell  || depth >= self.max_depth {
+            if self.nodes[node_index].count < self.elements_per_node || depth >= self.max_depth {
                 //println!("insert into leaf");
                 ElmRectNode::insert(element_id, &mut self.nodes[node_index], &mut self.element_nodes);
             }
@@ -234,14 +297,14 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         //println!("Making leaf into branch {:?}", node_index);
 
         let index = self.nodes.insert(Node::leaf());
-
-        let new_first_child = index;
-
         let index2 = self.nodes.insert(Node::leaf());
         let index3 = self.nodes.insert(Node::leaf());
         let index4 = self.nodes.insert(Node::leaf());
 
-        println!("{:?}", (index, index2, index3, index4));
+
+        let new_first_child = index;
+
+
         assert!(index == index2 - 1 && index2 == index3 - 1 && index3 == index4 - 1);
 
 
@@ -332,7 +395,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
                 let mut res = "".to_string();
                 while child_index != -1 {
                     let elm_node = &self.element_nodes[child_index];
-                    res += &format!(" element({}): {:?}, node: {:?} | ", elm_node.elm_id, self.data[elm_node.elm_id as usize], child_index);
+                    res += &format!(" e({}): {:?}, idx: {:?} | ", elm_node.elm_id, self.data[elm_node.elm_id as usize], child_index);
                     child_index = elm_node.next;
                 }
 
@@ -395,7 +458,7 @@ mod test {
 
         let locations = Rect::element_quad_locations(&node_rect, &element_rect);
 
-        println!("{:?}", locations);
+        //println!("{:?}", locations);
 
         assert!(locations[0] && locations[1] && locations[2] && locations[3]);
 
@@ -412,7 +475,7 @@ mod test {
 
         let locations = Rect::element_quad_locations(&node_rect, &element_rect);
 
-        println!("{:?}", locations);
+        //println!("{:?}", locations);
 
         assert!(locations[0] && !locations[1] && !locations[2] && !locations[3]);
 
@@ -428,7 +491,7 @@ mod test {
 
         let locations = Rect::element_quad_locations(&node_rect, &element_rect);
 
-        println!("{:?}", locations);
+        //println!("{:?}", locations);
 
         assert!(!locations[0] && locations[1] && !locations[2] && !locations[3]);
     }
@@ -443,7 +506,7 @@ mod test {
 
         let locations = Rect::element_quad_locations(&node_rect, &element_rect);
 
-        println!("{:?}", locations);
+        //println!("{:?}", locations);
 
         assert!(!locations[0] && !locations[1] && locations[2] && !locations[3]);
     }
@@ -459,7 +522,7 @@ mod test {
 
         let locations = Rect::element_quad_locations(&node_rect, &element_rect);
 
-        println!("{:?}", locations);
+        //println!("{:?}", locations);
 
         assert!(!locations[0] && !locations[1] && !locations[2] && locations[3]);
     }
@@ -472,6 +535,7 @@ mod test {
 
         let mut qt = QuadTree::<f32>::new(rect);
 
+        qt.set_elements_per_node(6);
 
         let elm1_id = 1.0;
         let elm1_rect = Rect::from_points(QuadPoint {x: 10, y: 10}, QuadPoint { x: 20, y: 20} );
@@ -525,23 +589,24 @@ mod test {
         let elm00_rect = Rect::new(-1, 1, 2, 2);
         let id00 = qt.insert(3.3, elm00_rect);
 
-        println!("tree:{:?}", qt);
+        //println!("tree:{:?}", qt);
 
 
         qt.remove(id00);
 
 
-        println!("tree:{:?}", qt);
+        //println!("tree:{:?}", qt);
 
-        println!("{:#?}", qt.nodes);
-        assert!(false);
+        //println!("{:#?}", qt.nodes);
+
 
 
 
     }
 
-   #[test]
-    fn insert_remove_2() {
+
+    #[test]
+    fn cleanup_1() {
 
         let rect = Rect::new(-128, 128, 256, 256);
 
@@ -550,26 +615,51 @@ mod test {
         let elm0_rect = Rect::new(5, 5, 1, 1);
         let id0 = qt.insert(5.0, elm0_rect);
 
-        let elm0_rect = Rect::new(7, 7, 1, 1);
+        let elm0_rect = Rect::new(-100, -100, 1, 1);
         let id1 = qt.insert(7.0, elm0_rect);
 
-        let elm0_rect = Rect::new(9,9, 1, 1);
-        let id2 = qt.insert(9.0, elm0_rect);
+        let elm0_rect = Rect::new(3, 3, 1, 1);
+        let id2 = qt.insert(3.0, elm0_rect);
 
-        let elm0_rect = Rect::new(13,13, 1, 1);
-        let id3 = qt.insert(13.0, elm0_rect);
+        let elm0_rect = Rect::new(-3, -3, 1, 1);
+        let id3 = qt.insert(-3.0, elm0_rect);
 
-        //println!("{:?}", id0);
-        println!("tree:{:?}", qt);
+        let elm0_rect = Rect::new(-6, -6, 1, 1);
+        let id4 = qt.insert(-6.0, elm0_rect);
+
+        //println!("\n\ntree:{:?}", qt);
 
         qt.remove(id0);
 
-        println!("tree:{:?}", qt);
+        assert_eq!(qt.nodes.active(), 9);
 
+
+        // rmeove and cleanup
         qt.remove(id1);
+        qt.remove(id3);
+        qt.remove(id4);
 
-        println!("tree:{:?}", qt);
-        assert!(false);
+
+        assert_eq!(qt.nodes.active(), 9);
+
+
+        qt.cleanup();
+
+        assert_eq!(qt.nodes.active(), 5);
+
+        let elm0_rect = Rect::new(-100, -100, 1, 1);
+        let id1 = qt.insert(7.0, elm0_rect);
+
+        let elm0_rect = Rect::new(3, 3, 1, 1);
+        let id2 = qt.insert(3.0, elm0_rect);
+
+        let elm0_rect = Rect::new(-3, -3, 1, 1);
+        let id3 = qt.insert(-3.0, elm0_rect);
+
+        let elm0_rect = Rect::new(-6, -6, 1, 1);
+        let id4 = qt.insert(-6.0, elm0_rect);
+
+        assert_eq!(qt.nodes.active(), 9);
 
 
 
@@ -585,6 +675,7 @@ mod test {
 
         let mut qt = QuadTree::<i32>::new(rect);
 
+        qt.set_elements_per_node(6);
 
         // insert 6 top right elements
         for i in 0..6 {
@@ -618,12 +709,9 @@ mod test {
         }
 
 
-        println!("{:#?}", qt);
-
-
-
         let points = qt.query(&Query::point(15, 15));
 
+        println!("{}", qt);
         assert_eq!(points.len(), 6);
         vec_compare(points, vec![0,1,2,3,4,5]);
 
@@ -656,7 +744,9 @@ mod test {
 
         let mut qt = QuadTree::<(i32, i32)>::new(rect);
 
+        qt.set_elements_per_node(6);
 
+        println!("{:?}", qt.elements_per_node);
         for i in (-51..49).step_by(2) {
             for j in (-51..49).step_by(2) {
                 let rect = Rect::new(i,j,0,0);
@@ -666,10 +756,11 @@ mod test {
 
         let points15_15 = qt.query(&Query::point(15, 15));
 
-        assert_eq!(points15_15.len(), 4);
+        println!("{:?}", points15_15);
+        assert_eq!(points15_15.len(), 1);
 
         let points0_0 = qt.query(&Query::point(0, 0));
-        assert_eq!(points0_0.len(), 16);
+        assert_eq!(points0_0.len(), 4);
 
         let search_rect = Rect::from_points(QuadPoint {x: -10, y: -10}, QuadPoint { x: 10, y: 10} );
         let points = qt.query(&Query::rect(search_rect));

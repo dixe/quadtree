@@ -66,6 +66,15 @@ impl Node {
             count: 0
         }
     }
+
+    pub fn is_branch(&self) -> bool {
+        self.count == -1
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        // can be 0 if all elements have been removed
+        self.count >= 0
+    }
 }
 
 

@@ -9,21 +9,24 @@ pub struct FreeItem<T> {
 }
 
 pub struct FreeList<T> {
-    pub data: Vec::<FreeItem<T>>,
-    pub first_free: i32,
+    data: Vec::<FreeItem<T>>,
+    first_free: i32,
+    active : i32
 }
 
 
-impl<T> FreeList<T> {
+impl<T : > FreeList<T> {
 
     pub fn new() -> Self {
         FreeList {
             data: Vec::new(),
-            first_free: -1
+            first_free: -1,
+            active: 0
         }
     }
 
     pub fn insert(&mut self, item: T) -> i32 {
+        self.active += 1;
         if self.first_free != -1 {
             let index = self.first_free;
             self.first_free = self.data[self.first_free as usize].next;
@@ -44,7 +47,7 @@ impl<T> FreeList<T> {
     }
 
     pub fn erase(&mut self, n: i32) {
-
+        self.active -= 1;
         self.data[n as usize].next = self.first_free;
         self.first_free = n;
     }
@@ -55,24 +58,12 @@ impl<T> FreeList<T> {
 
     }
 
+    pub fn active(&self) -> i32 {
+        self.active
+    }
     pub fn range(&self) -> i32 {
         (self.data.len() - 1)as i32
     }
-
-    pub fn print(&self) -> String {
-
-        let mut res = "".to_string();
-
-
-        for (i, e) in self.data.iter().enumerate() {
-            if e.next == -1 && self.first_free != i as i32 {
-                res += &format!("{}, ", i);
-            }
-        }
-
-        res
-    }
-
 }
 
 
@@ -92,21 +83,21 @@ impl<T> IndexMut<i32> for FreeList<T> {
 }
 
 
-impl<T> fmt::Display for FreeList<T> {
+impl<T: std::fmt::Debug> fmt::Debug for FreeList<T> {
 
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.print())
+        let mut dbg_list = f.debug_list();
+
+         for (i, e) in self.data.iter().enumerate() {
+            if e.next == -1 && self.first_free != i as i32 {
+                dbg_list.entry(&e.item);
+            }
+         }
+        dbg_list.finish()
+
     }
-}
-
-impl<T> fmt::Debug for FreeList<T> {
-
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
 
 }
-
 
 
 #[cfg(test)]
