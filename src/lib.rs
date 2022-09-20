@@ -5,6 +5,9 @@ use std::collections::VecDeque;
 
 mod query;
 mod data;
+
+pub use self::data::*;
+pub use self::query::*;
 // From answer here: https://stackoverflow.com/questions/41946007/efficient-and-well-explained-implementation-of-a-quadtree-for-2d-collision-det
 
 use data::*;
@@ -106,7 +109,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             for i in 0..leaf_node.count {
 
                 let mut prev = -1;
-                let mut cur = first_child + i;;
+                let mut cur = first_child + i;
 
                 while cur != -1 {
                     let e =  &self.element_nodes[cur];
@@ -336,7 +339,6 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         }
 
 
-
         // set first child as the first quadnode TL
         // and set count to -1 to indicate it is a branch
         self.nodes[node_index].first_child = new_first_child as i32;
@@ -346,13 +348,13 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
 
 
-    fn query_node_box(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut std::collections::HashSet::<i32>) {
+    fn query_node_box(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut  Vec::<i32>) {
         // leaf, return  all elements
         if self.nodes[node_index].count > -1 {
             let mut child_index = self.nodes[node_index].first_child;
 
             while child_index != -1 {
-                data_vec.insert(self.elm_rects[self.element_nodes[child_index].elm_id].data_id);
+                data_vec.push(self.elm_rects[self.element_nodes[child_index].elm_id].data_id);
                 child_index = self.element_nodes[child_index].next;
 
             }
@@ -363,7 +365,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-    fn query_branch(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut std::collections::HashSet::<i32>) {
+    fn query_branch(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut Vec::<i32>) {
 
         let locations = match query {
             Query::Point(p) => Rect::point_quad_locations(node_rect, p),

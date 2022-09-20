@@ -88,14 +88,14 @@ pub struct Rect {
 }
 
 #[derive(Debug)]
-pub struct QuadPoint {
+pub struct Point {
     pub x: i32,
     pub y: i32
 }
 
 impl Rect {
 
-    pub fn from_points(p1: QuadPoint, p2: QuadPoint) -> Self {
+    pub fn from_points(p1: Point, p2: Point) -> Self {
 
         Rect {
             left: i32::min(p1.x, p2.x),
@@ -119,22 +119,22 @@ impl Rect {
 
         let node_middle_x = (self.right - self.left) / 2 + self.left;
         let node_middle_y = (self.top - self.bottom) / 2 + self.bottom;
-        let middle_point = QuadPoint{x: node_middle_x, y: node_middle_y};
+        let middle_point = Point{x: node_middle_x, y: node_middle_y};
         return match i {
             // TL
-            0 => Rect::from_points(middle_point, QuadPoint{x: self.left, y: self.top}),
+            0 => Rect::from_points(middle_point, Point{x: self.left, y: self.top}),
             // TR
-            1 => Rect::from_points(middle_point, QuadPoint{x: self.right, y: self.top}),
+            1 => Rect::from_points(middle_point, Point{x: self.right, y: self.top}),
             // BL
-            2 => Rect::from_points(middle_point, QuadPoint{x: self.left, y: self.bottom}),
+            2 => Rect::from_points(middle_point, Point{x: self.left, y: self.bottom}),
             // BR
-            3 => Rect::from_points(middle_point, QuadPoint{x: self.right, y: self.bottom}),
+            3 => Rect::from_points(middle_point, Point{x: self.right, y: self.bottom}),
             _ => panic!("Location {} is not a valid location. Valid locations are: 0,1,2,3", i),
         }
     }
 
 
-     pub(crate) fn point_quad_locations(node_rect: &Rect, point: &QuadPoint) -> [bool; 4] {
+     pub(crate) fn point_quad_locations(node_rect: &Rect, point: &Point) -> [bool; 4] {
 
         // return bool for TL, TR, BL, BR
 
