@@ -25,12 +25,12 @@ impl<'a, T: std::fmt::Debug + std::cmp::Ord + Copy> QuadTree<T> {
 
         let root_rect = self.root_rect.clone();
 
-        let mut element_ids : Vec::<i32> = Vec::with_capacity(self.data.active() as usize);
+        let mut element_ids : Vec::<i32> = vec![];
         self.query_node_box(0, &root_rect, query, &mut element_ids);
 
         element_ids.sort();
         element_ids.dedup();
-        let mut res = Vec::with_capacity(element_ids.len());
+        let mut res = vec![];
 
         for index in element_ids.into_iter() {
             res.push(&self.data[index]);

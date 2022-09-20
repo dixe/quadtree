@@ -346,8 +346,6 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-
-
     fn query_node_box(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut  Vec::<i32>) {
         // leaf, return  all elements
         if self.nodes[node_index].count > -1 {
