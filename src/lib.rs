@@ -34,7 +34,7 @@ pub struct QuadTree<T> {
 
 
     // Actual data inserted into tree
-    data: Vec<T>,
+    data: FreeList::<T>,
 
     // Rect for the root
     // All sub rects are computed on the fly in integers
@@ -63,7 +63,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             elm_rects: FreeList::new(),
             element_nodes: FreeList::new(),
             nodes,
-            data: Vec::new(),
+            data: FreeList::new(),
             root_rect: rect,
             max_depth: 10,
             elements_per_node: 2
@@ -75,11 +75,10 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         //println!("inserting {:?}", element_rect);
         // check if we can insert into root
 
-        self.data.push(element);
-        let data_id = (self.data.len() - 1) as i32;
+        let data_id = self.data.insert(element);
 
         let element_id = self.elm_rects.insert(ElmRect {
-            id: data_id,
+            data_id: data_id,
             rect: element_rect.clone()
         });
 
@@ -136,7 +135,9 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         }
 
         // also data? but that could be slow???
+        self.data.erase(self.elm_rects[element_id].data_id);
         self.elm_rects.erase(element_id);
+
     }
 
     /// Clean the tree by making branches with only empty leaf children into leafs
@@ -351,8 +352,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             let mut child_index = self.nodes[node_index].first_child;
 
             while child_index != -1 {
-                data_vec.insert(self.elm_rects[self.element_nodes[child_index].elm_id].id);
-
+                data_vec.insert(self.elm_rects[self.element_nodes[child_index].elm_id].data_id);
                 child_index = self.element_nodes[child_index].next;
 
             }
@@ -395,7 +395,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
                 let mut res = "".to_string();
                 while child_index != -1 {
                     let elm_node = &self.element_nodes[child_index];
-                    res += &format!(" e({}): {:?}, idx: {:?} | ", elm_node.elm_id, self.data[elm_node.elm_id as usize], child_index);
+                    res += &format!(" e({}): {:?}, idx: {:?} | ", elm_node.elm_id, self.data[elm_node.elm_id], child_index);
                     child_index = elm_node.next;
                 }
 
@@ -553,13 +553,13 @@ mod test {
         let points0 = qt.query(&Query::point(15,15));
 
 
-        assert_eq!(points0.len(), 2);
-        vec_compare(points0, vec![1.0, 2.0]);
+        assert_eq!(points0.len(), 3);
+        vec_compare(points0, vec![1.0, 2.0, 3.0]);
 
 
         let points1 = qt.query(&Query::point(-1,-1));
-        assert_eq!(points1.len(), 2);
-        vec_compare(points1, vec![1.0, 2.0]);
+        assert_eq!(points1.len(), 3);
+        vec_compare(points1, vec![1.0, 2.0, 3.0]);
 
     }
 
@@ -589,18 +589,7 @@ mod test {
         let elm00_rect = Rect::new(-1, 1, 2, 2);
         let id00 = qt.insert(3.3, elm00_rect);
 
-        //println!("tree:{:?}", qt);
-
-
         qt.remove(id00);
-
-
-        //println!("tree:{:?}", qt);
-
-        //println!("{:#?}", qt.nodes);
-
-
-
 
     }
 
@@ -757,10 +746,10 @@ mod test {
         let points15_15 = qt.query(&Query::point(15, 15));
 
         println!("{:?}", points15_15);
-        assert_eq!(points15_15.len(), 1);
+        assert_eq!(points15_15.len(), 4);
 
         let points0_0 = qt.query(&Query::point(0, 0));
-        assert_eq!(points0_0.len(), 4);
+        assert_eq!(points0_0.len(), 16);
 
         let search_rect = Rect::from_points(QuadPoint {x: -10, y: -10}, QuadPoint { x: 10, y: 10} );
         let points = qt.query(&Query::rect(search_rect));

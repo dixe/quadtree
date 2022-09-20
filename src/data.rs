@@ -3,7 +3,7 @@ use crate::free_list::FreeList;
 //QuadElt is stored once, and is referred to by QuadEltNode
 #[derive(Debug)]
 pub(crate) struct ElmRect {
-    pub id: i32,
+    pub data_id: i32,
     pub rect: Rect
 }
 

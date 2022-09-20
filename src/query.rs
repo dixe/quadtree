@@ -31,7 +31,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         let mut res = Vec::new();
 
         for index in element_ids.into_iter() {
-            res.push(&self.data[index as usize]);
+            res.push(&self.data[index]);
         }
 
         res
