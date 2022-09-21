@@ -1,5 +1,5 @@
 use std::fmt;
-mod free_list;
+pub mod free_list;
 use free_list::FreeList;
 use std::collections::VecDeque;
 
@@ -8,6 +8,7 @@ mod data;
 
 pub use self::data::*;
 pub use self::query::*;
+
 // From answer here: https://stackoverflow.com/questions/41946007/efficient-and-well-explained-implementation-of-a-quadtree-for-2d-collision-det
 
 use data::*;
@@ -44,8 +45,10 @@ pub struct QuadTree<T> {
     root_rect: Rect,
 
     max_depth: i32,
-    elements_per_node: i32
+    elements_per_node: i32,
 
+    // buffer for storing querying, to store elements already found
+    query_tmp_buffer: Vec::<bool>,
 }
 
 
@@ -68,8 +71,9 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             nodes,
             data: FreeList::new(),
             root_rect: rect,
-            max_depth: 10,
-            elements_per_node: 2
+            max_depth: 7,
+            elements_per_node: 40,
+            query_tmp_buffer: vec![],
         }
     }
 
@@ -87,7 +91,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
         //println!("Inserting node for element with id: {:?}", element_id);
         let rect = self.root_rect.clone();
-        self.insert_elm(element_id, 0, &element_rect, &rect, 0);
+        self.insert_elm(element_id, 0, element_rect, rect, 0);
         element_id
     }
 
@@ -95,51 +99,55 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         self.elements_per_node = i32::max(1, npc);
     }
 
+
     /// Removes an element from the tree. Does not restructure the tree see ['cleanup()']
     pub fn remove(&mut self, element_id: i32) {
-
         let elm = &self.elm_rects[element_id];
-        let leaves = self.find_leaves(&elm);
-        for &leaf in &leaves {
+        let leaves = self.find_leaves(elm.rect);
 
+        for &leaf in &leaves {
             let leaf_node = &mut self.nodes[leaf];
 
+            let mut cur = leaf_node.first_child;
+            let mut prev = -1;
 
-            let first_child = leaf_node.first_child;
-            for i in 0..leaf_node.count {
 
-                let mut prev = -1;
-                let mut cur = first_child + i;
+            while cur != -1 {
+                let e =  &self.element_nodes[cur];
 
-                while cur != -1 {
-                    let e =  &self.element_nodes[cur];
+                let next = e.next;
+                let elm_rect_id = e.elm_id;
 
-                    let next = e.next;
-                    let elm_rect_id = e.elm_id;
+                if elm_rect_id == element_id {
 
-                    if elm_rect_id == element_id {
-                        leaf_node.count -= 1;
-                        if prev != -1 { //  in the middle of element chain
-                            self.element_nodes[prev].next = next;
-                        }
-                        else { // head of element chain, change the leaf node
-                            leaf_node.first_child = self.element_nodes[cur].next;
-                            //self.nodes[leaf_node]
-                        }
+                    if prev == -1 {
+                        // head of element chain, change the leaf node
 
-                        self.element_nodes.erase(cur);
-                    } else {
-                        prev = cur;
+                        leaf_node.first_child = next;
+                        //self.nodes[leaf_node]
+                    }
+                    else {
+                        //  in the middle of element chain
+                        self.element_nodes[prev].next = next;
                     }
 
-                    cur = next;
+
+                    self.element_nodes.erase(cur);
+
+                } else {
+                    prev = cur;
                 }
+
+
+                cur = next;
             }
         }
+
 
         // also data? but that could be slow???
         self.data.erase(self.elm_rects[element_id].data_id);
         self.elm_rects.erase(element_id);
+
 
     }
 
@@ -207,11 +215,11 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
 
 
-    fn find_leaves(&self, elm_rect: & ElmRect) -> Vec::<i32> {
+    fn find_leaves(&self, rect: Rect) -> Vec::<i32> {
         let mut res = vec![];
 
-        // start at root, at branches see which overlaps with elm.rect, process those too
-        // return vec of nodes that elm.rect overlaps
+        // start at root, at branches see which overlaps with rect, process those too
+        // return vec of nodes that rect overlaps
 
         let mut to_process = VecDeque::new();
 
@@ -230,14 +238,12 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             }
             else {
 
-                // is a branch, see which child quads elements fits into
-                let locations = Rect::element_quad_locations(&node_data.rect, &elm_rect.rect);
+                let locations = node_data.rect.location_quads();
 
                 for i in 0..4 {
-                    if locations[i] {
-                        // add matching child to process_list and calc the quad
-                        let new_rect = node_data.rect.location_quad(i);
-                        to_process.push_back(FindLeaves {node_id: node.first_child + i as i32, rect: new_rect});
+                    if locations[i].intersect(rect) {
+                        to_process.push_back(FindLeaves { node_id: node.first_child + i as i32, rect: locations[i]});
+
                     }
                 }
             }
@@ -248,8 +254,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-    fn insert_elm(&mut self, element_id: i32,  node_index: i32, element_rect: &Rect, node_rect: &Rect, depth: i32) {
-
+    fn insert_elm(&mut self, element_id: i32,  node_index: i32, element_rect: Rect, node_rect: Rect, depth: i32) {
 
         //println!("node_index = {} depth = {} {:?}", node_index, depth, self.nodes[node_index]);
 
@@ -257,7 +262,8 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         if self.nodes[node_index].count > -1 {
             // Check if we can just insert into this node
             if self.nodes[node_index].count < self.elements_per_node || depth >= self.max_depth {
-                //println!("insert into leaf");
+
+
                 ElmRectNode::insert(element_id, &mut self.nodes[node_index], &mut self.element_nodes);
             }
             // make this into not a leaf, but a branch
@@ -271,33 +277,30 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
         }
         else {
-            //println!("insert into branch");
             self.insert_into_branch(element_id, node_index, element_rect, node_rect, depth);
         }
     }
 
 
-    fn insert_into_branch(&mut self, element_id: i32, node_index: i32, element_rect: &Rect, node_rect: &Rect, depth: i32) {
+    fn insert_into_branch(&mut self, element_id: i32, node_index: i32, element_rect: Rect, node_rect: Rect, depth: i32) {
 
         // We are at a branch
         // check which children it should be se into
-        let locations = Rect::element_quad_locations(node_rect, element_rect);
-
+        let locations = node_rect.location_quads();
 
         for i in 0..4 {
-            if locations[i] {
-                let new_rect = node_rect.location_quad(i);
+            if locations[i].intersect(element_rect) {
 
                 let new_node_index = (self.nodes[node_index].first_child) + i as i32;
 
-                self.insert_elm(element_id, new_node_index, element_rect, &new_rect, depth + 1);
+                self.insert_elm(element_id, new_node_index, element_rect, locations[i], depth + 1);
             }
         }
     }
 
 
 
-    fn split(&mut self, node_index: i32, node_rect: &Rect) {
+    fn split(&mut self, node_index: i32, node_rect: Rect) {
         //println!("Making leaf into branch {:?}", node_index);
 
         let index = self.nodes.insert(Node::leaf());
@@ -325,7 +328,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
             self.element_nodes.erase(next_child);
 
-            let child_rect = &self.elm_rects[reallocated_id].rect;
+            let child_rect = self.elm_rects[reallocated_id].rect;
             let locations = Rect::element_quad_locations(node_rect, child_rect);
 
             for i in 0..4 {
@@ -346,34 +349,34 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-    fn query_node_box(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut  Vec::<i32>) {
-        // leaf, return  all elements
-        if self.nodes[node_index].count > -1 {
-            let mut child_index = self.nodes[node_index].first_child;
-
-            while child_index != -1 {
-                data_vec.push(self.elm_rects[self.element_nodes[child_index].elm_id].data_id);
-                child_index = self.element_nodes[child_index].next;
-
-            }
-        }
-        else {
-            self.query_branch(node_index, node_rect, query, data_vec);
-        }
-    }
 
 
-    fn query_branch(&self, node_index: i32, node_rect: &Rect, query: &Query, data_vec: &mut Vec::<i32>) {
+    fn query_node_box_rect(&mut self, node_index: i32, node_rect: Rect, query_r: Rect, omit_elm: i32, data_vec: &mut  Vec::<i32>) {
 
-        let locations = match query {
-            Query::Point(p) => Rect::point_quad_locations(node_rect, p),
-            Query::Rect(r) => Rect::element_quad_locations(node_rect, r )
-        };
+        let leaves = self.find_leaves(query_r);
+        for &leaf in &leaves {
+            let leaf_node = &self.nodes[leaf];
 
-        for i in 0..4 {
-            if locations[i] {
-                // point is inside this rect
-                self.query_node_box((self.nodes[node_index].first_child) + i as i32, &node_rect.location_quad(i), query, data_vec);
+            let mut elm_node_index = leaf_node.first_child;
+
+            while elm_node_index != -1 {
+                let elm_node = &self.element_nodes[elm_node_index];
+                let element_id = elm_node.elm_id;
+                let elm_rect = &self.elm_rects[element_id];
+                // Not omit and not already added to output and intersect query
+                if omit_elm != element_id && !self.query_tmp_buffer[element_id as usize] && query_r.intersect(elm_rect.rect) {
+                    //println!("{:?}", (query_r, elm_rect.rect));
+                    // add to found element for this query
+                    self.query_tmp_buffer[element_id as usize] = true;
+
+                    // TODO: validate that output is also what we expect, should it be elment_id or data_id??
+                    // Should be element_id or data[data_id], since we return eelment_id to user of tree.
+                    // Or it should be the actual data, maybe as ref??
+                    // add to output
+                    data_vec.push(element_id);
+                }
+
+                elm_node_index = elm_node.next;
             }
         }
     }
@@ -395,7 +398,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
                 let mut res = "".to_string();
                 while child_index != -1 {
                     let elm_node = &self.element_nodes[child_index];
-                    res += &format!(" e({}): {:?}, idx: {:?} | ", elm_node.elm_id, self.data[elm_node.elm_id], child_index);
+                    res += &format!(" e({}), idx: {:?} | ", elm_node.elm_id, child_index);
                     child_index = elm_node.next;
                 }
 

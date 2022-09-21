@@ -1,6 +1,7 @@
 use crate::data::*;
 use crate::*;
 
+#[derive(Debug,Clone,Copy)]
 pub enum Query {
     Point(Point),
     Rect(Rect)
@@ -21,23 +22,21 @@ impl Query {
 // Public interface for query
 impl<'a, T: std::fmt::Debug + std::cmp::Ord + Copy> QuadTree<T> {
 
-    pub fn query(&self, query: &Query) -> Vec::<&T> {
+     pub fn query(&mut self, query_r: Rect, omit_elm: i32, output: &mut Vec<i32>){
 
-        let root_rect = self.root_rect.clone();
+         if self.query_tmp_buffer.len() < self.elm_rects.len() as usize {
+             for _ in 0..(self.elm_rects.len() as usize - self.query_tmp_buffer.len() as usize) {
+                 self.query_tmp_buffer.push(false);
+             }
+         }
 
-        let mut element_ids : Vec::<i32> = vec![];
-        self.query_node_box(0, &root_rect, query, &mut element_ids);
+         let root_rect = self.root_rect;
+         self.query_node_box_rect(0, root_rect, query_r, omit_elm, output);
 
-        element_ids.sort();
-        element_ids.dedup();
-        let mut res = vec![];
-
-        for index in element_ids.into_iter() {
-            res.push(&self.data[index]);
-        }
-
-        res
-
+         // clear tmp buffer
+         for &mut element_index in output {
+             self.query_tmp_buffer[element_index as usize] = false;
+         }
 
     }
 }

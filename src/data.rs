@@ -21,28 +21,17 @@ impl ElmRectNode {
 
     pub fn insert(id: i32, node: &mut Node, element_nodes: &mut FreeList<ElmRectNode>) {
 
+        let current_first_child = node.first_child;
+
         //println!("Inserting node for element with id: {:?}", id);
         let elm_node_index = element_nodes.insert(ElmRectNode {
-            next: -1,
+            next: current_first_child,
             elm_id: id
         });
 
         node.count += 1;
 
-        let mut last_node_index = node.first_child;
-
-        if last_node_index == -1  {
-            //println!("index = -1");
-            node.first_child = elm_node_index;
-        }
-        else {
-
-            while element_nodes[last_node_index].next != -1 {
-                last_node_index = element_nodes[last_node_index].next;
-            }
-            //println!("last_index = {}", last_node_index);
-            element_nodes[last_node_index].next = elm_node_index;
-        }
+        node.first_child = elm_node_index;
     }
 }
 
@@ -87,7 +76,7 @@ pub struct Rect {
     pub bottom: i32
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub x: i32,
     pub y: i32
@@ -115,26 +104,28 @@ impl Rect {
 
     }
 
-    pub(crate) fn location_quad(&self, i: usize) -> Rect {
+    pub(crate) fn location_quads(&self) -> [Rect; 4] {
 
         let node_middle_x = (self.right - self.left) / 2 + self.left;
         let node_middle_y = (self.top - self.bottom) / 2 + self.bottom;
         let middle_point = Point{x: node_middle_x, y: node_middle_y};
-        return match i {
-            // TL
-            0 => Rect::from_points(middle_point, Point{x: self.left, y: self.top}),
-            // TR
-            1 => Rect::from_points(middle_point, Point{x: self.right, y: self.top}),
-            // BL
-            2 => Rect::from_points(middle_point, Point{x: self.left, y: self.bottom}),
-            // BR
-            3 => Rect::from_points(middle_point, Point{x: self.right, y: self.bottom}),
-            _ => panic!("Location {} is not a valid location. Valid locations are: 0,1,2,3", i),
-        }
+
+        [Rect::from_points(middle_point, Point{x: self.left, y: self.top}),
+         Rect::from_points(middle_point, Point{x: self.right, y: self.top}),
+         Rect::from_points(middle_point, Point{x: self.left, y: self.bottom}),
+         Rect::from_points(middle_point, Point{x: self.right, y: self.bottom}),
+        ]
     }
 
+    pub fn intersect(&self, other: Rect) -> bool {
+        self.left <= other.right &&
+            self.right >= other.left &&
+            self.top >= other.bottom &&
+            self.bottom <= other.top
 
-     pub(crate) fn point_quad_locations(node_rect: &Rect, point: &Point) -> [bool; 4] {
+    }
+
+     pub(crate) fn point_quad_locations(node_rect: Rect, point: &Point) -> [bool; 4] {
 
         // return bool for TL, TR, BL, BR
 
@@ -166,12 +157,11 @@ impl Rect {
             point.y <= node_middle_y &&
             point.y >= node_rect.bottom;
 
-        //println!("\n\n{:#?} - {:#?}\n{:?}", node_rect, point,        [tl, tr, bl, br]);
         [tl, tr, bl, br]
 
     }
 
-     pub(crate) fn element_quad_locations(node_rect: &Rect, element_rect: &Rect) -> [bool; 4] {
+     pub(crate) fn element_quad_locations(node_rect: Rect, element_rect: Rect) -> [bool; 4] {
 
         // return bool for TL, TR, BL, BR
 
