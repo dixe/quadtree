@@ -69,17 +69,34 @@ impl Node {
 
 
 #[derive(Debug, Clone, Copy)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32
+}
+
+
+impl Point {
+
+    pub fn new(x: i32, y: i32) -> Self{
+        Self {x, y }
+    }
+
+
+    pub fn to_rect(p: Point) -> Rect {
+        Rect {
+            left: p.x,
+            right: p.x,
+            top: p.y,
+            bottom: p.y
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
 pub struct Rect {
     pub left: i32,
     pub top: i32,
     pub right: i32,
     pub bottom: i32
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Point {
-    pub x: i32,
-    pub y: i32
 }
 
 impl Rect {

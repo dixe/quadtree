@@ -11,7 +11,7 @@ pub struct FreeItem<T> {
 pub struct FreeList<T> {
     data: Vec::<FreeItem<T>>,
     first_free: i32,
-    len : i32
+    elements : i32
 }
 
 
@@ -21,12 +21,12 @@ impl<T : > FreeList<T> {
         FreeList {
             data: Vec::new(),
             first_free: -1,
-            len: 0
+            elements: 0
         }
     }
 
     pub fn insert(&mut self, item: T) -> i32 {
-        self.len += 1;
+        self.elements += 1;
         if self.first_free != -1 {
             let index = self.first_free;
             self.first_free = self.data[self.first_free as usize].next;
@@ -46,8 +46,16 @@ impl<T : > FreeList<T> {
 
     }
 
+    pub fn elements_count(&self) -> i32 {
+        self.elements
+    }
+
+    pub fn data_len(&self) -> i32 {
+        self.data.len() as i32
+    }
+
     pub fn erase(&mut self, n: i32) {
-        self.len -= 1;
+        self.elements -= 1;
         self.data[n as usize].next = self.first_free;
         self.first_free = n;
     }
@@ -55,14 +63,10 @@ impl<T : > FreeList<T> {
     pub fn clear(&mut self) {
         self.data.clear();
         self.first_free = -1;
+        self.elements = 0;
     }
 
-    pub fn len(&self) -> i32 {
-        self.len
-    }
-    pub fn range(&self) -> i32 {
-        (self.data.len() - 1)as i32
-    }
+
 }
 
 
