@@ -43,7 +43,6 @@ impl<T : > FreeList<T> {
             self.data.push(fe);
             return (self.data.len() - 1) as i32;
         }
-
     }
 
     pub fn elements_count(&self) -> i32 {

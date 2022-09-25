@@ -72,8 +72,8 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             nodes,
             data: FreeList::new(),
             root_rect: rect,
-            max_depth: 6,
-            elements_per_node: 40,
+            max_depth: 10,
+            elements_per_node: 300,
             query_tmp_buffer: vec![],
         }
     }
@@ -105,8 +105,6 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         let elm = &self.elm_rects[element_id];
         let leaves = self.find_leaves(0, self.root_rect, elm.rect, 0);
 
-        panic!();
-        println!("REMOVE");
         for &leaf in &leaves {
             let leaf_index = leaf.node_index;
             let leaf_node = &mut self.nodes[leaf_index];
@@ -143,7 +141,11 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         // also data? but that could be slow???
         self.data.erase(self.elm_rects[element_id].data_id);
         self.elm_rects.erase(element_id);
+
     }
+
+
+
 
     /// Clean the tree by making branches with only empty leaf children into leafs
     /// Only does one level per call.
@@ -206,8 +208,12 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     pub fn clear(&mut self) {
 
         self.elm_rects.clear();
-        self.element_nodes.clear();
+        //self.element_nodes.clear();
         self.data.clear();
+
+        self.element_nodes.clear();
+
+        //println!("{:?}", (self.element_node_lists.data_len(), self.element_node_lists.elements_count(),self.nodes.elements_count()));
 
         // using len is not correct. Since that is active elements
         for i in 0..self.nodes.data_len() {
@@ -217,13 +223,17 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
             }
         }
     }
+
+    pub fn max_element_id(&self) -> usize {
+        self.elm_rects.data_len() as usize
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Leaf {
-    node_index: i32,
-    depth: i32,
-    rect: Rect,
+pub struct Leaf {
+    pub node_index: i32,
+    pub depth: i32,
+    pub rect: Rect,
 }
 
 struct InsertProcess {
@@ -279,17 +289,6 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         res
     }
 
-    fn print_node_chain(&self, element_node: i32) {
-
-        let mut cur = element_node;
-
-        while cur != -1 {
-            let next = self.element_nodes[cur].next;
-            println!("{:?}",(cur, next));
-            cur = next;
-
-        }
-    }
 
 
 
@@ -302,7 +301,6 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         to_process.push_back(InsertProcess { element_id, node_index, node_rect, depth});
 
         while let Some(node_data) = to_process.pop_front() {
-
 
             let leaves = self.find_leaves(node_index, node_rect, self.elm_rects[element_id].rect, depth);
 
@@ -324,8 +322,10 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
                 self.nodes[leaf.node_index].first_child = elm_node_index;
                 self.nodes[leaf.node_index].count += 1;
 
+
                 // Split node if too big and not too far down
                 if self.nodes[leaf.node_index].count >= self.elements_per_node && leaf.depth < self.max_depth  {
+
 
                     // transfer node children to tmp list
                     // TODO: Maybe allocate a tmp buffer for this on self??
@@ -351,6 +351,8 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
 
                     assert!(self.nodes[leaf.node_index].first_child == -1);
 
+
+
                     // allocate 4 children
                     let index = self.nodes.insert(Node::leaf());
                     let index2 = self.nodes.insert(Node::leaf());
@@ -358,12 +360,19 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
                     let index4 = self.nodes.insert(Node::leaf());
 
 
+
                     // make leaf into a node
                     self.nodes[leaf.node_index].first_child = index;
                     self.nodes[leaf.node_index].count = -1;
 
+
+                    // push current children to be processed (inserted into leaves)
                     for i in 0..element_list.data_len() {
-                        to_process.push_back(InsertProcess { element_id: element_list[i], node_index, node_rect: leaf.rect, depth: leaf.depth + 1 });
+                        to_process.push_back(InsertProcess {
+                            element_id: element_list[i],
+                            node_index,
+                            node_rect: leaf.rect,
+                            depth: leaf.depth + 1 });
 
                         //self.node_insert(element_list[i], node_index, leaf.rect, leaf.depth + 1);
                     }
@@ -375,12 +384,10 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
     }
 
 
-
-
-
     fn print(&self) -> String {
         self.print_node(0, 0)
     }
+
 
     fn print_node(&self, node_index: i32, indent: usize) -> String {
 
@@ -422,6 +429,7 @@ impl<'a, T: std::fmt::Debug> QuadTree<T> {
         }
 
     }
+
 }
 
 
